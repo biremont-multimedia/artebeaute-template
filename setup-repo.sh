@@ -61,9 +61,20 @@ copy_file() {
       ok "$dst deja a jour"
       add_summary "Fichier deja a jour : $dst"
     else
-      cp "$src" "$dst"
-      ok "$dst remplace"
-      add_summary "Fichier mis a jour : $dst"
+      echo ""
+      warn "$dst existe deja et differe du template. Diff (template vs existant) :"
+      diff -u "$dst" "$src" || true
+      echo ""
+      read -r -p "Ecraser $dst ? (o/N) " ANSWER </dev/tty
+      if [[ "$ANSWER" == "o" || "$ANSWER" == "O" ]]; then
+        cp "$src" "$dst"
+        ok "$dst mis a jour"
+        add_summary "Fichier mis a jour : $dst"
+      else
+        warn "$dst conserve"
+        add_summary "Fichier conserve : $dst"
+        return 0
+      fi
     fi
   else
     cp "$src" "$dst"
