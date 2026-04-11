@@ -9,6 +9,7 @@ set -euo pipefail
 
 TEMPLATE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(pwd)"
+cd "$REPO_DIR"
 
 GREEN="\033[0;32m"
 YELLOW="\033[0;33m"
@@ -22,6 +23,7 @@ warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
 err()   { echo -e "${RED}[ERR]${NC} $*"; }
 
 SUMMARY=()
+COPIED_FILES=()
 add_summary() { SUMMARY+=("$1"); }
 
 # 1. Verifier que gh cli est installe
@@ -45,14 +47,19 @@ fi
 
 # 2. Copier les fichiers du template
 info "Copie des fichiers de configuration ArteBeaute..."
-mkdir -p "$REPO_DIR/.github/workflows"
 
 copy_file() {
   local src="$1"
   local dst="$2"
+  if [[ ! -f "$src" ]]; then
+    err "Source introuvable : $src"
+    return 1
+  fi
+  mkdir -p "$(dirname "$dst")"
   if [[ -f "$dst" ]]; then
     if cmp -s "$src" "$dst"; then
       ok "$dst deja a jour"
+      add_summary "Fichier deja a jour : $dst"
     else
       cp "$src" "$dst"
       ok "$dst remplace"
@@ -63,6 +70,7 @@ copy_file() {
     ok "$dst cree"
     add_summary "Fichier cree : $dst"
   fi
+  COPIED_FILES+=("$dst")
 }
 
 copy_file "$TEMPLATE_DIR/.releaserc.json"            "$REPO_DIR/.releaserc.json"
@@ -76,6 +84,37 @@ else
   cp "$TEMPLATE_DIR/CLAUDE.md" "$REPO_DIR/CLAUDE.md"
   ok "CLAUDE.md cree depuis le template"
   add_summary "CLAUDE.md cree depuis le template"
+fi
+
+# 2bis. Verifier package.json et installer les dependances semantic-release
+info "Verification de package.json et dependances semantic-release..."
+if [[ -f "$REPO_DIR/package.json" ]]; then
+  SR_DEPS=(
+    semantic-release
+    @semantic-release/commit-analyzer
+    @semantic-release/release-notes-generator
+    @semantic-release/changelog
+    @semantic-release/git
+    @semantic-release/github
+  )
+  MISSING_DEPS=()
+  for DEP in "${SR_DEPS[@]}"; do
+    if ! node -e "const p=require('$REPO_DIR/package.json'); process.exit((p.devDependencies && p.devDependencies['$DEP']) ? 0 : 1)" 2>/dev/null; then
+      MISSING_DEPS+=("$DEP")
+    fi
+  done
+  if [[ ${#MISSING_DEPS[@]} -eq 0 ]]; then
+    ok "Toutes les dependances semantic-release sont deja dans devDependencies"
+    add_summary "Dependances semantic-release : deja presentes"
+  else
+    info "Installation des dependances manquantes : ${MISSING_DEPS[*]}"
+    (cd "$REPO_DIR" && npm install --save-dev --legacy-peer-deps "${MISSING_DEPS[@]}")
+    ok "Dependances semantic-release installees"
+    add_summary "Dependances semantic-release installees : ${MISSING_DEPS[*]}"
+  fi
+else
+  warn "package.json absent, installation semantic-release skippee"
+  add_summary "package.json absent : deps semantic-release non installees"
 fi
 
 # 3. VERSION_BUILD : creer si absent avec valeur 1
@@ -174,5 +213,13 @@ echo -e "${GREEN}========================================${NC}"
 for line in "${SUMMARY[@]}"; do
   echo "  - $line"
 done
+
+if [[ ${#COPIED_FILES[@]} -gt 0 ]]; then
+  echo ""
+  echo -e "${GREEN}Fichiers copies depuis le template :${NC}"
+  for f in "${COPIED_FILES[@]}"; do
+    echo "  - $f"
+  done
+fi
 echo ""
 ok "Setup termine pour : $REPO_DIR"
