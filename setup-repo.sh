@@ -88,7 +88,13 @@ fi
 
 # 2bis. Verifier package.json et installer les dependances semantic-release
 info "Verification de package.json et dependances semantic-release..."
+INITIAL_PKG_VERSION=""
+FINAL_PKG_VERSION=""
 if [[ -f "$REPO_DIR/package.json" ]]; then
+  INITIAL_PKG_VERSION=$(node -e "console.log(require('$REPO_DIR/package.json').version || '')" 2>/dev/null || echo "")
+  if [[ -n "$INITIAL_PKG_VERSION" ]]; then
+    info "Version actuelle de package.json : $INITIAL_PKG_VERSION (ne sera pas modifiee par ce script)"
+  fi
   SR_DEPS=(
     semantic-release
     @semantic-release/commit-analyzer
@@ -203,6 +209,18 @@ else
   git commit -m "chore(release): setup convention ArteBeaute"
   ok "Commit cree"
   add_summary "Commit chore(release): setup convention ArteBeaute"
+fi
+
+# 7bis. Verifier que la version de package.json n'a pas ete modifiee
+if [[ -f "$REPO_DIR/package.json" ]]; then
+  FINAL_PKG_VERSION=$(node -e "console.log(require('$REPO_DIR/package.json').version || '')" 2>/dev/null || echo "")
+  if [[ -n "$INITIAL_PKG_VERSION" && "$INITIAL_PKG_VERSION" != "$FINAL_PKG_VERSION" ]]; then
+    err "package.json.version a change : $INITIAL_PKG_VERSION -> $FINAL_PKG_VERSION (bug du script)"
+    add_summary "package.json : version MODIFIEE ($INITIAL_PKG_VERSION -> $FINAL_PKG_VERSION) - ANOMALIE"
+  elif [[ -n "$FINAL_PKG_VERSION" ]]; then
+    ok "package.json.version inchangee : $FINAL_PKG_VERSION"
+    add_summary "package.json.version : $FINAL_PKG_VERSION (inchangee)"
+  fi
 fi
 
 # 8. Resume
