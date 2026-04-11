@@ -1,0 +1,88 @@
+name: Zammad - Link Commits
+
+on:
+  push:
+    branches: ['**']
+
+jobs:
+  link:
+    runs-on: ubuntu-latest
+    env:
+      ZAMMAD_URL: ${{ secrets.ZAMMAD_URL }}
+      ZAMMAD_TOKEN: ${{ secrets.ZAMMAD_API_TOKEN }}
+      REPO: ${{ github.repository }}
+      BRANCH: ${{ github.ref_name }}
+      PUSHER: ${{ github.event.pusher.name }}
+      COMPARE_URL: ${{ github.event.compare }}
+
+    steps:
+      - name: Extract Zammad references from commits
+        id: refs
+        run: |
+          set -euo pipefail
+          REFS=$(jq -r '
+            [.commits[]
+              | . as $c
+              | ($c.message | scan("\\[ZAM-([0-9]+)\\]") | .[0])
+              | select(. != null)
+              | { zam: ., sha: $c.id, short: ($c.id[0:7]), msg: ($c.message | split("\n")[0]), author: $c.author.name, url: $c.url }
+            ]
+          ' "$GITHUB_EVENT_PATH")
+          echo "refs<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$REFS" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Post article on referenced Zammad tickets
+        if: steps.refs.outputs.refs != '[]'
+        run: |
+          set -euo pipefail
+          REFS='${{ steps.refs.outputs.refs }}'
+
+          UNIQUE_ZAMS=$(echo "$REFS" | jq -r '[.[].zam] | unique | .[]')
+
+          for ZAM_NUMBER in $UNIQUE_ZAMS; do
+            TICKET_ID=$(curl -sSf \
+              -H "Authorization: Token token=${ZAMMAD_TOKEN}" \
+              "${ZAMMAD_URL}/api/v1/tickets/search?query=number:${ZAM_NUMBER}&limit=1" \
+              | jq -r '.tickets[0] // empty')
+
+            if [ -z "$TICKET_ID" ]; then
+              echo "::warning::Ticket Zammad #${ZAM_NUMBER} introuvable (commit ignoré)"
+              continue
+            fi
+
+            COMMITS_HTML=$(echo "$REFS" | jq -r --arg zam "$ZAM_NUMBER" '
+              [.[] | select(.zam == $zam)]
+              | map("<li><a href=\"\(.url)\"><code>\(.short)</code></a> — \(.msg) <em>(\(.author))</em></li>")
+              | join("\n")
+            ')
+
+            BODY=$(cat <<EOF
+<p><strong>Nouveaux commits</strong> sur <code>${REPO}</code> branche <code>${BRANCH}</code> (par ${PUSHER})</p>
+<ul>
+${COMMITS_HTML}
+</ul>
+<p><a href="${COMPARE_URL}">Voir le diff complet</a></p>
+EOF
+)
+            BODY_JSON=$(jq -n \
+              --argjson id "$TICKET_ID" \
+              --arg subject "Commits liés — ${REPO}@${BRANCH}" \
+              --arg body "$BODY" '
+              {
+                ticket_id: $id,
+                subject: $subject,
+                body: $body,
+                type: "note",
+                internal: false,
+                content_type: "text/html"
+              }')
+
+            curl -sSf -X POST \
+              -H "Authorization: Token token=${ZAMMAD_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "$BODY_JSON" \
+              "${ZAMMAD_URL}/api/v1/ticket_articles" > /dev/null
+
+            echo "Article posté sur ticket Zammad #${ZAM_NUMBER}"
+          done

@@ -1,0 +1,132 @@
+name: Zammad - Sync Issue
+
+on:
+  issues:
+    types: [opened, edited, closed, reopened]
+
+concurrency:
+  group: zammad-sync-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    env:
+      ZAMMAD_URL: ${{ secrets.ZAMMAD_URL }}
+      ZAMMAD_TOKEN: ${{ secrets.ZAMMAD_API_TOKEN }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      ZAMMAD_GROUP: ${{ vars.ZAMMAD_DEFAULT_GROUP || 'Dev' }}
+      ZAMMAD_CUSTOMER: ${{ vars.ZAMMAD_DEFAULT_CUSTOMER || 'github-bot@artebeaute.com' }}
+      ISSUE_TITLE: ${{ github.event.issue.title }}
+      ISSUE_BODY: ${{ github.event.issue.body }}
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+      ISSUE_URL: ${{ github.event.issue.html_url }}
+      ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
+      ACTION: ${{ github.event.action }}
+      REPO: ${{ github.repository }}
+
+    steps:
+      - name: Map GitHub action to Zammad state
+        id: state
+        run: |
+          case "$ACTION" in
+            opened|reopened) echo "state=open" >> "$GITHUB_OUTPUT" ;;
+            closed)          echo "state=closed" >> "$GITHUB_OUTPUT" ;;
+            edited)          echo "state=" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Extract existing Zammad ticket number from title
+        id: parse
+        run: |
+          if [[ "$ISSUE_TITLE" =~ \[ZAM-([0-9]+)\] ]]; then
+            echo "zam_number=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+          else
+            echo "zam_number=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update existing Zammad ticket
+        if: steps.parse.outputs.zam_number != ''
+        run: |
+          set -euo pipefail
+          ZAM_NUMBER="${{ steps.parse.outputs.zam_number }}"
+          STATE="${{ steps.state.outputs.state }}"
+
+          TICKET_ID=$(curl -sSf \
+            -H "Authorization: Token token=${ZAMMAD_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "${ZAMMAD_URL}/api/v1/tickets/search?query=number:${ZAM_NUMBER}&limit=1" \
+            | jq -r '.tickets[0] // empty')
+
+          if [ -z "$TICKET_ID" ]; then
+            echo "::warning::Zammad ticket #${ZAM_NUMBER} introuvable"
+            exit 0
+          fi
+
+          CLEAN_TITLE=$(echo "$ISSUE_TITLE" | sed -E 's/^\[ZAM-[0-9]+\][[:space:]]*//')
+          BODY_JSON=$(jq -n \
+            --arg title "$CLEAN_TITLE" \
+            --arg state "$STATE" \
+            --arg subject "GitHub issue #${ISSUE_NUMBER} — ${ACTION}" \
+            --arg body "Issue GitHub \`${REPO}#${ISSUE_NUMBER}\` (${ACTION}) par **${ISSUE_AUTHOR}**<br><a href=\"${ISSUE_URL}\">${ISSUE_URL}</a><br><br>${ISSUE_BODY}" '
+            {
+              title: $title,
+              article: {
+                subject: $subject,
+                body: $body,
+                type: "note",
+                internal: false,
+                content_type: "text/html"
+              }
+            }
+            + (if $state == "" then {} else { state: $state } end)
+          ')
+
+          curl -sSf -X PUT \
+            -H "Authorization: Token token=${ZAMMAD_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "$BODY_JSON" \
+            "${ZAMMAD_URL}/api/v1/tickets/${TICKET_ID}" > /dev/null
+
+          echo "Ticket Zammad #${ZAM_NUMBER} mis à jour"
+
+      - name: Create Zammad ticket + rename issue
+        if: steps.parse.outputs.zam_number == '' && github.event.action == 'opened'
+        run: |
+          set -euo pipefail
+
+          BODY_JSON=$(jq -n \
+            --arg title "$ISSUE_TITLE" \
+            --arg group "$ZAMMAD_GROUP" \
+            --arg customer "$ZAMMAD_CUSTOMER" \
+            --arg subject "GitHub issue #${ISSUE_NUMBER} — ${REPO}" \
+            --arg body "Issue GitHub ouverte par **${ISSUE_AUTHOR}**<br><a href=\"${ISSUE_URL}\">${ISSUE_URL}</a><br><br>${ISSUE_BODY}" '
+            {
+              title: $title,
+              group: $group,
+              customer: $customer,
+              state: "new",
+              priority: "2 normal",
+              article: {
+                subject: $subject,
+                body: $body,
+                type: "note",
+                internal: false,
+                content_type: "text/html"
+              }
+            }')
+
+          RESPONSE=$(curl -sSf -X POST \
+            -H "Authorization: Token token=${ZAMMAD_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "$BODY_JSON" \
+            "${ZAMMAD_URL}/api/v1/tickets")
+
+          ZAM_NUMBER=$(echo "$RESPONSE" | jq -r '.number')
+          echo "Ticket Zammad créé: #${ZAM_NUMBER}"
+
+          NEW_TITLE="[ZAM-${ZAM_NUMBER}] ${ISSUE_TITLE}"
+          gh issue edit "$ISSUE_NUMBER" \
+            --repo "$REPO" \
+            --title "$NEW_TITLE"
