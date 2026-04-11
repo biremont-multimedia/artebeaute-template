@@ -1,0 +1,51 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  release:
+    name: Semantic Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run semantic-release
+        id: semantic
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          npx semantic-release
+          SEMANTIC_VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")
+          echo "SEMANTIC_VERSION=$SEMANTIC_VERSION" >> $GITHUB_ENV
+
+      - name: Increment build number
+        run: |
+          BUILD_NUMBER=$(cat VERSION_BUILD)
+          BUILD_NUMBER=$((BUILD_NUMBER + 1))
+          echo "$BUILD_NUMBER" > VERSION_BUILD
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
+
+      - name: Display full version
+        run: 'echo "Version complete : $SEMANTIC_VERSION-$BUILD_NUMBER"'
