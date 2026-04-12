@@ -144,6 +144,16 @@ else
   add_summary "VERSION_BUILD cree (valeur 1)"
 fi
 
+# 3bis. .nvmrc : creer si absent avec valeur 22
+if [[ -f "$REPO_DIR/.nvmrc" ]]; then
+  ok ".nvmrc existe deja (valeur : $(cat "$REPO_DIR/.nvmrc"))"
+  add_summary ".nvmrc conserve"
+else
+  echo "22" > "$REPO_DIR/.nvmrc"
+  ok ".nvmrc cree avec valeur 22"
+  add_summary ".nvmrc cree (valeur 22)"
+fi
+
 # 4. Creer la branche develop si elle n'existe pas
 info "Verification de la branche develop..."
 if git show-ref --verify --quiet refs/heads/develop; then
@@ -212,7 +222,7 @@ fi
 
 # 7. Commit chore(release): setup convention ArteBeaute
 info "Creation du commit..."
-git add .releaserc.json .github/workflows/release.yml CLAUDE.md VERSION_BUILD .gitignore 2>/dev/null || true
+git add .releaserc.json .github/workflows/release.yml CLAUDE.md VERSION_BUILD .nvmrc .gitignore 2>/dev/null || true
 if git diff --cached --quiet; then
   warn "Aucun changement a committer"
   add_summary "Commit : aucun changement"
