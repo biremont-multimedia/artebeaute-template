@@ -49,9 +49,7 @@ jobs:
         run: |
           set -euo pipefail
           COMMITS=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json commits --jq '[.commits[].messageHeadline, .commits[].messageBody] | join("\n")')
-          HAYSTACK="${PR_TITLE}
-          ${PR_BODY}
-          ${COMMITS}"
+          HAYSTACK="${PR_TITLE} ${PR_BODY} ${COMMITS}"
           ZAMS=$(echo "$HAYSTACK" | grep -oE '\[ZAM-[0-9]+\]' | grep -oE '[0-9]+' | sort -u || true)
           echo "zams<<EOF" >> "$GITHUB_OUTPUT"
           echo "$ZAMS" >> "$GITHUB_OUTPUT"
