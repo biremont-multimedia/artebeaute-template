@@ -43,7 +43,7 @@ jobs:
           for ZAM_NUMBER in $UNIQUE_ZAMS; do
             TICKET_ID=$(curl -sSf \
               -H "Authorization: Token token=${ZAMMAD_TOKEN}" \
-              "${ZAMMAD_URL}/api/v1/tickets/search?query=number:${ZAM_NUMBER}&limit=1" \
+              "${ZAMMAD_URL}/api/v1/tickets/search?query=${ZAM_NUMBER}&limit=1" \
               | jq -r '.[0].id // empty')
 
             if [ -z "$TICKET_ID" ]; then

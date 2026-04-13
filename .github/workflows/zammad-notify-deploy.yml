@@ -55,7 +55,7 @@ jobs:
           BODY="Deploiement ${VERSION} sur ${REPO} par ${PR_AUTHOR} - PR ${PR_URL}"
           while IFS= read -r ZAM_NUMBER; do
             [ -z "$ZAM_NUMBER" ] && continue
-            TICKET_ID=$(curl -sSf -H "Authorization: Token token=${ZAMMAD_TOKEN}" "${ZAMMAD_URL}/api/v1/tickets/search?query=number:${ZAM_NUMBER}&limit=1" | jq -r '.[0].id // empty')
+            TICKET_ID=$(curl -sSf -H "Authorization: Token token=${ZAMMAD_TOKEN}" "${ZAMMAD_URL}/api/v1/tickets/search?query=${ZAM_NUMBER}&limit=1" | jq -r '.[0].id // empty')
             [ -z "$TICKET_ID" ] && continue
             curl -sSf -X PUT -H "Authorization: Token token=${ZAMMAD_TOKEN}" -H "Content-Type: application/json" -d "{\"state\":\"pending close\",\"article\":{\"subject\":\"Deploiement ${VERSION}\",\"body\":\"${BODY}\",\"type\":\"note\",\"internal\":false}}" "${ZAMMAD_URL}/api/v1/tickets/${TICKET_ID}" > /dev/null
             echo "Ticket #${ZAM_NUMBER} notifie"
