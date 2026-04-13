@@ -1,3 +1,4 @@
+
 name: Zammad - Notify Deploy
 
 on:
@@ -9,6 +10,7 @@ jobs:
   notify:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
+
     permissions:
       contents: read
       pull-requests: read
@@ -25,10 +27,12 @@ jobs:
       PR_AUTHOR: ${{ github.event.pull_request.user.login }}
       MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
 
+
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
 
       - name: Compute version A.B.C-XX-TENANT
         id: version

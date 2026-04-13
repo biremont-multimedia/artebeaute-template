@@ -1,8 +1,11 @@
+
 name: Zammad - Sync Issue
+
 
 on:
   issues:
     types: [opened, edited, closed, reopened]
+
 
 concurrency:
   group: zammad-sync-${{ github.event.issue.number }}
