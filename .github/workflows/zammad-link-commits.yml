@@ -1,15 +1,12 @@
-
 name: Zammad - Link Commits
 
 on:
   push:
     branches: ['**']
 
-
 jobs:
   link:
     runs-on: ubuntu-latest
-
     env:
       ZAMMAD_URL: ${{ secrets.ZAMMAD_URL }}
       ZAMMAD_TOKEN: ${{ secrets.ZAMMAD_API_TOKEN }}
@@ -47,7 +44,7 @@ jobs:
             TICKET_ID=$(curl -sSf \
               -H "Authorization: Token token=${ZAMMAD_TOKEN}" \
               "${ZAMMAD_URL}/api/v1/tickets/search?query=number:${ZAM_NUMBER}&limit=1" \
-              | jq -r '.tickets[0] // empty')
+              | jq -r '.[0].id // empty')
 
             if [ -z "$TICKET_ID" ]; then
               echo "::warning::Ticket Zammad #${ZAM_NUMBER} introuvable (commit ignoré)"
@@ -60,7 +57,11 @@ jobs:
               | join("\n")
             ')
 
-            BODY="<p><strong>Nouveaux commits</strong> sur <code>${REPO}</code> branche <code>${BRANCH}</code> (par ${PUSHER})</p><ul>${COMMITS_HTML}</ul><p><a href=\"${COMPARE_URL}\">Voir le diff complet</a></p>"
+            BODY="<p><strong>Nouveaux commits</strong> sur <code>${REPO}</code> branche <code>${BRANCH}</code> (par ${PUSHER})</p>
+            <ul>
+            ${COMMITS_HTML}
+            </ul>
+            <p><a href=\"${COMPARE_URL}\">Voir le diff complet</a></p>"
             BODY_JSON=$(jq -n \
               --argjson id "$TICKET_ID" \
               --arg subject "Commits liés — ${REPO}@${BRANCH}" \

@@ -1,11 +1,8 @@
-
 name: Zammad - Sync Issue
-
 
 on:
   issues:
     types: [opened, edited, closed, reopened]
-
 
 concurrency:
   group: zammad-sync-${{ github.event.issue.number }}
@@ -60,7 +57,7 @@ jobs:
             -H "Authorization: Token token=${ZAMMAD_TOKEN}" \
             -H "Content-Type: application/json" \
             "${ZAMMAD_URL}/api/v1/tickets/search?query=number:${ZAM_NUMBER}&limit=1" \
-            | jq -r '.tickets[0] // empty')
+            | jq -r '.[0].id // empty')
 
           if [ -z "$TICKET_ID" ]; then
             echo "::warning::Zammad ticket #${ZAM_NUMBER} introuvable"

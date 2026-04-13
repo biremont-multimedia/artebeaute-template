@@ -1,4 +1,3 @@
-
 name: Zammad - Notify Deploy
 
 on:
@@ -10,7 +9,6 @@ jobs:
   notify:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
-
     permissions:
       contents: read
       pull-requests: read
@@ -27,12 +25,10 @@ jobs:
       PR_AUTHOR: ${{ github.event.pull_request.user.login }}
       MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
 
-
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
 
       - name: Compute version A.B.C-XX-TENANT
         id: version
@@ -53,7 +49,9 @@ jobs:
         run: |
           set -euo pipefail
           COMMITS=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json commits --jq '[.commits[].messageHeadline, .commits[].messageBody] | join("\n")')
-          HAYSTACK=$(printf '%s\n%s\n%s' "$PR_TITLE" "$PR_BODY" "$COMMITS")
+          HAYSTACK="${PR_TITLE}
+${PR_BODY}
+${COMMITS}"
           ZAMS=$(echo "$HAYSTACK" | grep -oE '\[ZAM-[0-9]+\]' | grep -oE '[0-9]+' | sort -u || true)
           echo "zams<<EOF" >> "$GITHUB_OUTPUT"
           echo "$ZAMS" >> "$GITHUB_OUTPUT"
@@ -65,7 +63,18 @@ jobs:
           set -euo pipefail
           VERSION="${{ steps.version.outputs.full }}"
 
-          BODY="<p><strong>Déploiement</strong> 🚀</p><ul><li><strong>Version</strong> : <code>${VERSION}</code></li><li><strong>Repo</strong> : <code>${REPO}</code></li><li><strong>Tenant</strong> : <code>${TENANT}</code></li><li><strong>PR</strong> : <a href=\"${PR_URL}\">#${PR_NUMBER} — ${PR_TITLE}</a> (par ${PR_AUTHOR})</li><li><strong>Commit de merge</strong> : <code>${MERGE_SHA}</code></li></ul><p>Ce ticket est passé en <em>pending close</em>.</p>"
+          BODY=$(cat <<EOF
+<p><strong>Déploiement</strong> 🚀</p>
+<ul>
+  <li><strong>Version</strong> : <code>${VERSION}</code></li>
+  <li><strong>Repo</strong> : <code>${REPO}</code></li>
+  <li><strong>Tenant</strong> : <code>${TENANT}</code></li>
+  <li><strong>PR</strong> : <a href="${PR_URL}">#${PR_NUMBER} — ${PR_TITLE}</a> (par ${PR_AUTHOR})</li>
+  <li><strong>Commit de merge</strong> : <code>${MERGE_SHA}</code></li>
+</ul>
+<p>Ce ticket est passé en <em>pending close</em>.</p>
+EOF
+)
 
           while IFS= read -r ZAM_NUMBER; do
             [ -z "$ZAM_NUMBER" ] && continue
@@ -73,7 +82,7 @@ jobs:
             TICKET_ID=$(curl -sSf \
               -H "Authorization: Token token=${ZAMMAD_TOKEN}" \
               "${ZAMMAD_URL}/api/v1/tickets/search?query=number:${ZAM_NUMBER}&limit=1" \
-              | jq -r '.tickets[0] // empty')
+              | jq -r '.[0].id // empty')
 
             if [ -z "$TICKET_ID" ]; then
               echo "::warning::Ticket Zammad #${ZAM_NUMBER} introuvable"
