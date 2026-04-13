@@ -50,8 +50,8 @@ jobs:
           set -euo pipefail
           COMMITS=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json commits --jq '[.commits[].messageHeadline, .commits[].messageBody] | join("\n")')
           HAYSTACK="${PR_TITLE}
-${PR_BODY}
-${COMMITS}"
+          ${PR_BODY}
+          ${COMMITS}"
           ZAMS=$(echo "$HAYSTACK" | grep -oE '\[ZAM-[0-9]+\]' | grep -oE '[0-9]+' | sort -u || true)
           echo "zams<<EOF" >> "$GITHUB_OUTPUT"
           echo "$ZAMS" >> "$GITHUB_OUTPUT"
@@ -63,18 +63,15 @@ ${COMMITS}"
           set -euo pipefail
           VERSION="${{ steps.version.outputs.full }}"
 
-          BODY=$(cat <<EOF
-<p><strong>Déploiement</strong> 🚀</p>
-<ul>
-  <li><strong>Version</strong> : <code>${VERSION}</code></li>
-  <li><strong>Repo</strong> : <code>${REPO}</code></li>
-  <li><strong>Tenant</strong> : <code>${TENANT}</code></li>
-  <li><strong>PR</strong> : <a href="${PR_URL}">#${PR_NUMBER} — ${PR_TITLE}</a> (par ${PR_AUTHOR})</li>
-  <li><strong>Commit de merge</strong> : <code>${MERGE_SHA}</code></li>
-</ul>
-<p>Ce ticket est passé en <em>pending close</em>.</p>
-EOF
-)
+          BODY="<p><strong>Déploiement</strong> 🚀</p>
+          <ul>
+            <li><strong>Version</strong> : <code>${VERSION}</code></li>
+            <li><strong>Repo</strong> : <code>${REPO}</code></li>
+            <li><strong>Tenant</strong> : <code>${TENANT}</code></li>
+            <li><strong>PR</strong> : <a href=\"${PR_URL}\">#${PR_NUMBER} — ${PR_TITLE}</a> (par ${PR_AUTHOR})</li>
+            <li><strong>Commit de merge</strong> : <code>${MERGE_SHA}</code></li>
+          </ul>
+          <p>Ce ticket est passé en <em>pending close</em>.</p>"
 
           while IFS= read -r ZAM_NUMBER; do
             [ -z "$ZAM_NUMBER" ] && continue
